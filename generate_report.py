@@ -2,14 +2,14 @@
 """
 韭研公社 A股/美股 每日舆情汇总报告生成器
 适配 GitHub Actions 运行环境
-支持 Markdown 和 HTML 两种格式
+支持 Markdown、HTML 和邮件推送
 """
 
 import json
 import os
 import logging
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 logger = logging.getLogger()
 
@@ -114,8 +114,88 @@ class ReportGenerator:
 
         return "\n".join(lines)
 
+    def generate_email_html(self, articles: List[Dict]) -> str:
+        """生成适合邮件的 HTML（内联样式，兼容各种邮箱客户端）"""
+        now = datetime.now()
+        today_str = now.strftime("%Y年%m月%d日")
+        time_str = now.strftime("%H:%M")
+
+        zh = [a for a in articles if a["type"] == "A股"]
+        us = [a for a in articles if a["type"] == "美股"]
+        all_kw = self._top_keywords(articles, 20)
+
+        def esc(t):
+            return t.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
+
+        def kw_tags_html(kw_list):
+            if not kw_list:
+                return ""
+            tags = []
+            for k, c in kw_list[:15]:
+                tags.append(f'<span style="display:inline-block;background:#f0f0f0;padding:4px 10px;margin:2px;border-radius:4px;font-size:13px;color:#333">{esc(k)} <sup style="font-size:10px;color:#999">({c})</sup></span>')
+            return "".join(tags)
+
+        def articles_html(list_articles, accent_color, label):
+            if not list_articles:
+                return f'<tr><td style="padding:16px;text-align:center;color:#999;font-size:14px">暂无{label}相关内容</td></tr>'
+            rows = []
+            for i, a in enumerate(list_articles[:20], 1):
+                kw_html = " ".join([f'<span style="font-size:11px;color:{accent_color};background:#f5f5f5;padding:2px 6px;border-radius:3px;margin-right:4px">{esc(kw)}</span>' for kw in a.get("keywords",[])[:4]])
+                rows.append(f'''
+                <tr style="border-bottom:1px solid #f0f0f0">
+                    <td style="padding:12px 0;font-size:14px;line-height:1.6">
+                        <div style="font-weight:600;margin-bottom:4px;color:#222">{i}. {esc(a["title"])}</div>
+                        <div style="font-size:12px;color:#999;margin-bottom:6px">{kw_html}</div>
+                        <a href="{a["url"]}" style="font-size:12px;color:{accent_color};text-decoration:none">查看原文 →</a>
+                    </td>
+                </tr>''')
+            return "".join(rows)
+
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f6fa;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6fa;padding:20px 0">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;margin:0 16px">
+    <!-- Header -->
+    <tr><td style="background:linear-gradient(135deg,#1a1a2e,#0f3460);padding:32px 28px;text-align:center">
+        <h1 style="color:#fff;font-size:22px;margin:0 0 6px">韭研公社 每日舆情汇总</h1>
+        <p style="color:rgba(255,255,255,.7);font-size:13px;margin:0">{today_str} {time_str}</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px">
+            <tr>
+                <td align="center" style="padding:10px"><span style="font-size:28px;font-weight:800;color:#ff6b6b">{len(zh)}</span><br><span style="font-size:12px;color:rgba(255,255,255,.7)">A股相关</span></td>
+                <td align="center" style="padding:10px"><span style="font-size:28px;font-weight:800;color:#74b9ff">{len(us)}</span><br><span style="font-size:12px;color:rgba(255,255,255,.7)">美股相关</span></td>
+            </tr>
+        </table>
+    </td></tr>
+    <!-- 热词 -->
+    {'<tr><td style="padding:20px 24px 8px"><h2 style="font-size:15px;color:#999;margin:0 0 10px">今日热词</h2>' + kw_tags_html(all_kw) + '</td></tr>' if all_kw else ''}
+    <!-- A股 -->
+    <tr><td style="padding:20px 24px">
+        <h2 style="font-size:17px;color:#e74c3c;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #f0f0f0">📈 A股相关 ({len(zh)} 篇)</h2>
+        <table width="100%" cellpadding="0" cellspacing="0">
+            {articles_html(zh, '#e74c3c', 'A股')}
+        </table>
+    </td></tr>
+    <!-- 美股 -->
+    <tr><td style="padding:20px 24px">
+        <h2 style="font-size:17px;color:#2980b9;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #f0f0f0">🌎 美股相关 ({len(us)} 篇)</h2>
+        <table width="100%" cellpadding="0" cellspacing="0">
+            {articles_html(us, '#2980b9', '美股')}
+        </table>
+    </td></tr>
+    <!-- Footer -->
+    <tr><td style="padding:16px 24px;text-align:center;font-size:11px;color:#bbb;border-top:1px solid #f0f0f0">
+        由 GitHub Actions 自动生成 | 内容仅供参考，不构成投资建议
+    </td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>"""
+        return html
+
     def generate_html(self, articles: List[Dict]) -> str:
-        """生成 HTML 报告"""
+        """生成网页版 HTML 报告"""
         now = datetime.now()
         today_str = now.strftime("%Y年%m月%d日")
         time_str = now.strftime("%H:%M")
