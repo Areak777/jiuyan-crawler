@@ -38,7 +38,3 @@ jobs:
           publish_dir: ./data
           destination_dir: ./reports
           keep_files: true
-
-          publish_dir: ./data
-          destination_dir: ./reports
-          keep_files: true
