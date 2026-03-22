@@ -21,6 +21,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: 运行抓取
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python run.py
       - name: 上传报告
         uses: actions/upload-artifact@v4
@@ -32,6 +35,10 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./data
+          destination_dir: ./reports
+          keep_files: true
+
           publish_dir: ./data
           destination_dir: ./reports
           keep_files: true
