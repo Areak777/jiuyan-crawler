@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-韭研公社 A股/美股 舆情爬虫 v3 - 多策略综合版
+韭研公社 A股/美股 舆情爬虫 v3 - 精简版
 适配 GitHub Actions 运行环境
 
 策略1: HTML直接解析（首页/研究优选/热门）
 策略2: SSR数据提取（异动页面）
-策略3: DuckDuckGo搜索补充（site:jiuyangongshe.com）
 """
 
 import requests
@@ -189,47 +188,6 @@ class JiuyanCrawler:
             logger.error(f"  异动页面失败: {e}")
 
     # --------------------------------------------------------
-    # 策略3: DuckDuckGo 搜索补充
-    # --------------------------------------------------------
-    def crawl_duckduckgo(self):
-        """通过 DuckDuckGo 搜索补充韭研公社最新内容"""
-        logger.info(f"[策略3] DuckDuckGo 搜索补充")
-        try:
-            from ddgs import DDGS
-
-            month_str = datetime.now().strftime('%Y-%m')
-            queries = [
-                f"jiuyangongshe.com stock market China A-share {month_str}",
-                f"jiuyangongshe.com US stock Tesla Nvidia {month_str}",
-                f"jiuyangongshe.com AI chip semiconductor",
-                f"jiuyangongshe.com IPO policy central bank",
-            ]
-
-            count = 0
-            ddgs = DDGS()
-            for query in queries:
-                try:
-                    self._delay()
-                    results = ddgs.text(query, max_results=10)
-                    for r in results:
-                        title = r.get("title", "")
-                        href = r.get("href", "")
-                        body = r.get("body", "")
-                        if "jiuyangongshe" in href:
-                            self._add_article(title, href, "DuckDuckGo", body)
-                            count += 1
-                except Exception as e:
-                    logger.error(f"  搜索失败: {e}")
-                    continue
-
-            logger.info(f"  DuckDuckGo 补充 {count} 篇文章")
-
-        except ImportError:
-            logger.warning("  ddgs 未安装，跳过此策略")
-        except Exception as e:
-            logger.error(f"  DuckDuckGo 失败: {e}")
-
-    # --------------------------------------------------------
     # 主入口
     # --------------------------------------------------------
     def crawl_all(self) -> List[Dict]:
@@ -240,7 +198,6 @@ class JiuyanCrawler:
 
         self.crawl_html_pages()
         self.crawl_action_page()
-        self.crawl_duckduckgo()
 
         zh = [a for a in self.all_articles if a["type"] == "A股"]
         us = [a for a in self.all_articles if a["type"] == "美股"]
